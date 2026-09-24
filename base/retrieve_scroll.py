@@ -1,4 +1,4 @@
-from qdrant_point_struct import client
+from base.qdrant_point_struct import client
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 result = client.retrieve(
