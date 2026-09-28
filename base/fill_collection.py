@@ -3,6 +3,14 @@ from data.client_connect import client
 from pathlib import Path
 import json
 import numpy as np
+from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
+import os
+
+
+load_dotenv()
+model_path = Path(os.getenv("MODEL_PATH"))
+model = SentenceTransformer(str(model_path))
 
 
 def take_from_file(file_path) -> list:
@@ -14,17 +22,18 @@ def create_books_collection(client):
     try:
         client.create_collection(
             collection_name="books_collection",
-            vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+            vectors_config=VectorParams(size=768, distance=Distance.COSINE)
         )
+        return True
     except:
         print("books_collection already exists!")
-    return
+        return False
 
 
 def generate_point(item) -> PointStruct:
     return PointStruct(
         id=item["id"],
-        vector=np.random.normal(loc=0.0, scale=1.0, size=384).tolist(),
+        vector=model.encode(item["text"]),
         payload={
             "title": item["title"],
             "author":item["author"],
@@ -40,20 +49,25 @@ def generate_point(item) -> PointStruct:
 def main():
     file_path = Path("data/books_dataset.json")
     files = take_from_file(file_path)
-    create_books_collection(client)
-    points = []
-    for f in files:
-        points.append(generate_point(f))
+    if not create_books_collection(client):
+        points = []
+        for f in files:
+            points.append(generate_point(f))
     
-    client.upsert(
+        client.upsert(
+            collection_name="books_collection",
+            points=points
+        )
+
+    hits = client.query_points(
         collection_name="books_collection",
-        points=points
-    )
-    results = client.scroll(
-        collection_name="books_collection",
-        limit=100
-    )
-    print(results)
+        query=model.encode("золотая рыба исполняет желания"),
+        limit=3,
+    ).points
+    # 85 0.645 На дне
+    # 25 0.598 Вий
+    # 4 0.577 Обломов
+    print([print(hit.id, round(hit.score, 3), hit.payload.get("title")) for hit in hits])
 
 
 if __name__ == "__main__":
